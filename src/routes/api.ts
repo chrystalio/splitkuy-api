@@ -20,19 +20,24 @@ function requireApiKey(req: Request, res: Response, next: NextFunction): void {
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, // 10MB — PDFs can be larger than images
     files: 1,
   },
   fileFilter: (_req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "application/pdf",
+    ];
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type"));
+      cb(new Error("Invalid file type. Only JPEG, PNG, WebP, and PDF are allowed."));
     }
   },
 });
 
-router.post("/parse-receipt", requireApiKey, upload.single("image"), parseReceiptHandler);
+router.post("/parse-receipt", requireApiKey, upload.single("file"), parseReceiptHandler);
 
 export default router;
