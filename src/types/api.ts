@@ -22,9 +22,6 @@ export const ApiDiscountSchema = z.object({
 export const ParsedReceiptSchema = z.object({
   items: z.array(ReceiptItemSchema),
   subtotal: z.number().min(0),
-  tax: z.number().min(0),
-  serviceCharge: z.number().min(0),
-  discount: z.number().min(0),
   fees: z.array(ApiFeeSchema).default([]),
   discounts: z.array(ApiDiscountSchema).default([]),
   total: z.number().min(0),
