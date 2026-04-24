@@ -1,0 +1,60 @@
+{
+  "info": {
+    "name": "SplitKuy API",
+    "_postman_id": "splitkuy-api-001",
+    "description": "SplitKuy API — Gemini receipt parsing proxy",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "api_key",
+      "value": "YOUR_API_KEY_HERE"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": ["{{base_url}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Parse Receipt",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{api_key}}"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "image",
+              "type": "file",
+              "src": [],
+              "disabled": false
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/api/parse-receipt",
+          "host": ["{{base_url}}"],
+          "path": ["api", "parse-receipt"]
+        }
+      }
+    }
+  ]
+}
