@@ -37,11 +37,11 @@ app.use("/api", apiRouter);
 
 app.use((err: Error, _req: Request, res: Response, next: NextFunction) => {
   if (err.message?.includes("Invalid file type")) {
-    res.status(400).json({ error: "Bad Request", message: "Only JPEG, PNG, and WebP images are accepted.", statusCode: 400 });
+    res.status(400).json({ error: "Bad Request", message: "Only JPEG, PNG, WebP, and PDF are accepted.", statusCode: 400 });
     return;
   }
   if (err.message?.includes("File too large")) {
-    res.status(400).json({ error: "Bad Request", message: "File too large. Maximum size is 5MB.", statusCode: 400 });
+    res.status(400).json({ error: "Bad Request", message: "File too large. Maximum size is 10MB.", statusCode: 400 });
     return;
   }
   console.error("[Unhandled Error]", err);

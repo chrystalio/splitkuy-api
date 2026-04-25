@@ -8,7 +8,8 @@ import { GEMINI_SYSTEM_PROMPT } from "./prompt";
 
 export async function parseReceiptImage(
   base64Image: string,
-  mimeType: string
+  mimeType: string,
+  options?: { signal?: AbortSignal }
 ): Promise<ParsedReceipt> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -30,9 +31,10 @@ export async function parseReceiptImage(
     ],
   });
 
-  const result = await model.generateContent([
-    { inlineData: { data: base64Image, mimeType } },
-  ]);
+  const result = await model.generateContent(
+    [{ inlineData: { data: base64Image, mimeType } }],
+    { signal: options?.signal }
+  );
 
   const text = result.response.text();
 

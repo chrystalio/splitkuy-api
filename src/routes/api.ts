@@ -38,6 +38,43 @@ const upload = multer({
   },
 });
 
-router.post("/parse-receipt", requireApiKey, upload.single("file"), parseReceiptHandler);
+// Normalize field name — accept both "image" (legacy) and "file" (current).
+// Prefer "file" if both are present.
+function normalizeReceiptUpload(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  const files = req.files as
+    | { [fieldname: string]: Express.Multer.File[] }
+    | Express.Multer.File[]
+    | undefined;
+
+  if (!files || Array.isArray(files)) {
+    next();
+    return;
+  }
+
+  const imageFile = (files as { image?: Express.Multer.File[] }).image?.[0];
+  const fileFile = (files as { file?: Express.Multer.File[] }).file?.[0];
+  const selectedFile = imageFile ?? fileFile;
+
+  if (selectedFile) {
+    req.file = selectedFile;
+  }
+
+  next();
+}
+
+router.post(
+  "/parse-receipt",
+  requireApiKey,
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "file", maxCount: 1 },
+  ]),
+  normalizeReceiptUpload,
+  parseReceiptHandler
+);
 
 export default router;

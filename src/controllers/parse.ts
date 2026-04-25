@@ -18,7 +18,15 @@ const GEMINI_TIMEOUT_MS = 30_000;
 async function extractPdfPages(
   pdfBytes: Uint8Array
 ): Promise<{ base64: string; mimeType: string }[]> {
-  const pdfDoc = await PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  let pdfDoc: PDFDocument;
+  try {
+    pdfDoc = await PDFDocument.load(pdfBytes);
+  } catch (err) {
+    if (err instanceof Error && err.message.includes("encrypted")) {
+      throw new Error("Encrypted PDFs are not supported. Please provide an unencrypted PDF.");
+    }
+    throw err;
+  }
   const pageCount = pdfDoc.getPageCount();
 
   if (pageCount > MAX_PDF_PAGES) {
@@ -95,6 +103,9 @@ function mergeReceiptResults(results: ParsedReceipt[]): ParsedReceipt {
 
 // ---------------------------------------------------------------------------
 // Core parse — dispatches to image or PDF pipeline
+// Gemini SDK doesn't expose AbortController, so we use AbortSignal.timeout()
+// via fetch (which the SDK uses under the hood). This actually terminates
+// the HTTP request rather than just rejecting a promise.
 // ---------------------------------------------------------------------------
 async function parseFile(
   buffer: Buffer,
@@ -105,21 +116,27 @@ async function parseFile(
     const results: ParsedReceipt[] = [];
 
     for (let i = 0; i < pages.length; i++) {
-      const pageResult = await Promise.race([
-        parseReceiptImage(pages[i].base64, pages[i].mimeType),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () =>
-              reject(
-                new Error(
-                  `Page ${i + 1} of ${pages.length} timed out after ${GEMINI_TIMEOUT_MS}ms`
-                )
-              ),
-            GEMINI_TIMEOUT_MS
-          )
-        ),
-      ]);
-      results.push(pageResult);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        GEMINI_TIMEOUT_MS
+      );
+
+      try {
+        const pageResult = await parseReceiptImage(pages[i].base64, pages[i].mimeType, {
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        results.push(pageResult);
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err instanceof Error && err.name === "AbortError") {
+          throw new Error(
+            `Page ${i + 1} of ${pages.length} timed out after ${GEMINI_TIMEOUT_MS}ms`
+          );
+        }
+        throw err;
+      }
     }
 
     return mergeReceiptResults(results);
@@ -127,15 +144,22 @@ async function parseFile(
 
   // Image: process directly
   const base64Image = buffer.toString("base64");
-  return Promise.race([
-    parseReceiptImage(base64Image, mimeType),
-    new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("Gemini request timed out")),
-        GEMINI_TIMEOUT_MS
-      )
-    ),
-  ]);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
+  try {
+    const result = await parseReceiptImage(base64Image, mimeType, {
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return result;
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Gemini request timed out after ${GEMINI_TIMEOUT_MS}ms`);
+    }
+    throw err;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -190,17 +214,27 @@ export async function parseReceiptHandler(
     const message =
       err instanceof Error ? err.message : "Failed to parse receipt.";
 
-    const userError =
-      message.includes("timed out") ||
+    const timeoutError = message.toLowerCase().includes("timed out");
+    const validationError =
       message.includes("out of range") ||
       message.includes("maximum") ||
       message.includes("Unsupported") ||
+      message.includes("Encrypted") ||
       message.includes("unexpected");
 
-    res.status(userError ? 400 : 500).json({
-      error: userError ? "Bad Request" : "Internal Server Error",
-      message,
-      statusCode: userError ? 400 : 500,
+    if (timeoutError) {
+      res.status(504).json({
+        error: "Gateway Timeout",
+        message: "Receipt parsing timed out. Please try again.",
+        statusCode: 504,
+      });
+      return;
+    }
+
+    res.status(validationError ? 400 : 500).json({
+      error: validationError ? "Bad Request" : "Internal Server Error",
+      message: validationError ? message : "Failed to parse receipt.",
+      statusCode: validationError ? 400 : 500,
     });
   }
 }
